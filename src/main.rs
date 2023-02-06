@@ -18,7 +18,7 @@ use embassy_usb::{Builder, DeviceStateHandler};
 use {defmt_rtt as _, panic_probe as _};
 
 mod xinput;
-use crate::xinput::{XinputReaderWriter, XinputState, RequestHandler, ReportId, XinputControlReport};
+use crate::xinput::{XInputReaderWriter, XInputState, RequestHandler, ReportId, XInputControlReport};
 
 const VENDOR_STRING: &'static str = "TEST";
 const PRODUCT_STRING: &'static str = "TEST CON";
@@ -41,7 +41,7 @@ async fn main(_spawner: Spawner) {
         Timer::after(Duration::from_millis(10)).await;
     }
 
-    info!("STM32 Xinput example");
+    info!("STM32 XInput example");
 
     // Create the driver, from the HAL.
     let irq = interrupt::take!(USB_LP_CAN1_RX0);
@@ -70,7 +70,7 @@ async fn main(_spawner: Spawner) {
     let request_handler = MyRequestHandler {};
     let device_state_handler = MyDeviceStateHandler::new();
 
-    let mut state = XinputState::new();
+    let mut state = XInputState::new();
 
     let mut builder = Builder::new(
         driver,
@@ -91,7 +91,7 @@ async fn main(_spawner: Spawner) {
         request_handler: Some(&request_handler),
         ..Default::default()
     };
-    let xinput = XinputReaderWriter::<_>::new(&mut builder, &mut state, config);
+    let xinput = XInputReaderWriter::<_>::new(&mut builder, &mut state, config);
 
     // Build the builder.
     let mut usb = builder.build();
@@ -114,7 +114,7 @@ async fn main(_spawner: Spawner) {
             button.wait_for_high().await;
             info!("PRESSED");
 
-            let report = XinputControlReport {
+            let report = XInputControlReport {
                 button_a: true,
                 ..Default::default()
             };
@@ -127,7 +127,7 @@ async fn main(_spawner: Spawner) {
             button.wait_for_low().await;
             info!("RELEASED");
 
-            let report = XinputControlReport {
+            let report = XInputControlReport {
                 button_a: false,
                 ..Default::default()
             };

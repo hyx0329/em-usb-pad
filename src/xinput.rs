@@ -10,14 +10,14 @@ use embassy_usb::driver::{Driver, Endpoint, EndpointError, EndpointIn, EndpointO
 
 use defmt::{trace, warn};
 
-// For Xinput controllers, there are 4 USB interfaces:
+// For XInput controllers, there are 4 USB interfaces:
 // - Control
 // - Audio (and possibly expansion port)
 // - Unknown (whatever)
 // - Security (authentication with xbox console)
 // each interface may have several endpoints to use
 // btw, embassy-usb limit the usb interface number to 4, which is just enough
-// The Xinput protocol is NOT a variant of USB HID, it's a fully customized one.
+// The XInput protocol is NOT a variant of USB HID, it's a fully customized one.
 
 
 // just copied from a controller with XInput support
@@ -103,14 +103,14 @@ pub trait RequestHandler {
 }
 
 /// The ability to convert struct to a buffer to send
-pub trait AsXinputReport {
+pub trait AsXInputReport {
     /// Write serialized report to the given buffer start from given offset
     fn write_buf(offset: usize, buf: &[u8]) -> usize;
 }
 
 #[derive(PackedStruct, Default, Debug, PartialEq)]
 #[packed_struct(endian="lsb", bit_numbering="msb0")]
-pub struct XinputControlReport {
+pub struct XInputControlReport {
     // byte zero
     #[packed_field(bits="0")]
     pub thumb_click_right: bool,
@@ -160,21 +160,21 @@ pub struct XinputControlReport {
     pub js_right_y: i16,
 }
 
-impl XinputControlReport {
+impl XInputControlReport {
     fn new() -> Self {
-        XinputControlReport::default()
+        XInputControlReport::default()
     }
 }
 
 #[derive(Default)]
-pub struct XinputRumbleState {
+pub struct XInputRumbleState {
     left: u8,
     right: u8,
 }
 
 #[repr(u8)]
 #[derive(PrimitiveEnum_u8, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum XinputLedPattern {
+pub enum XInputLedPattern {
     Off         = 0x00,
     Blink       = 0x01,
     Flash1      = 0x02,
@@ -191,9 +191,9 @@ pub enum XinputLedPattern {
     Alternate   = 0x0D,
 }
 
-pub enum XinputStatusReport {
-    Rumble(XinputRumbleState),
-    Led(XinputLedPattern),
+pub enum XInputStatusReport {
+    Rumble(XInputRumbleState),
+    Led(XInputLedPattern),
 }
 
 pub struct Config<'d> {
@@ -278,7 +278,7 @@ impl<'d> Control<'d> {
 
 impl<'d> ControlHandler for Control<'d> {
     fn get_string(&mut self, index: embassy_usb::types::StringIndex, lang_id: u16) -> Option<&str> {
-        trace!("Xinput get_descriptor string");
+        trace!("XInput get_descriptor string");
         let _ = lang_id;
         match u8::from(index) {
             0x01 => self.vendor_string,
@@ -291,28 +291,28 @@ impl<'d> ControlHandler for Control<'d> {
 }
 
 /// A shared state of interface status
-pub struct XinputState<'d> {
+pub struct XInputState<'d> {
     control_control: MaybeUninit<Control<'d>>,
 }
 
-impl<'d> XinputState<'d> {
+impl<'d> XInputState<'d> {
     pub fn new() -> Self {
-        XinputState {
+        XInputState {
             control_control: MaybeUninit::uninit(),
         }
     }
 }
 
-pub struct XinputReaderWriter<'d, D: Driver<'d>> {
-    reader: XinputReader<'d, D>,
-    writer: XinputWriter<'d, D>,
+pub struct XInputReaderWriter<'d, D: Driver<'d>> {
+    reader: XInputReader<'d, D>,
+    writer: XInputWriter<'d, D>,
 }
 
-pub struct XinputWriter<'d, D: Driver<'d>> {
+pub struct XInputWriter<'d, D: Driver<'d>> {
     ep_in: D::EndpointIn,
 }
 
-pub struct XinputReader<'d, D: Driver<'d>> {
+pub struct XInputReader<'d, D: Driver<'d>> {
     ep_out: D::EndpointOut,
 }
 
@@ -332,7 +332,7 @@ impl From<EndpointError> for ReadError {
     }
 }
 
-impl<'d, D: Driver<'d>> XinputWriter<'d, D> {
+impl<'d, D: Driver<'d>> XInputWriter<'d, D> {
 
     /// Waits for the interrupt in endpoint to be enabled.
     pub async fn ready(&mut self) -> () {
@@ -340,7 +340,7 @@ impl<'d, D: Driver<'d>> XinputWriter<'d, D> {
     }
 
     /// Write controller status by serializing the report structure
-    pub async fn write_control(&mut self, report: &XinputControlReport) -> Result<(), EndpointError> {
+    pub async fn write_control(&mut self, report: &XInputControlReport) -> Result<(), EndpointError> {
         let mut buf = [0 as u8; 0x14];
         buf[0] = 0x00; // packet type
         buf[1] = 0x14; // packet length
@@ -360,7 +360,7 @@ impl<'d, D: Driver<'d>> XinputWriter<'d, D> {
     }
 }
 
-impl<'d, D: Driver<'d>> XinputReader<'d, D> {
+impl<'d, D: Driver<'d>> XInputReader<'d, D> {
     /// Waits for the interrupt out endpoint to be enabled.
     pub async fn ready(&mut self) -> () {
         self.ep_out.wait_enabled().await
@@ -408,7 +408,7 @@ impl<'d, D: Driver<'d>> XinputReader<'d, D> {
 /// Create all 4 interfaces for xinput
 fn build<'d, D: Driver<'d>>(
     builder: &mut Builder<'d, D>,
-    state: &'d mut XinputState<'d>,
+    state: &'d mut XInputState<'d>,
     config: Config<'d>,
 ) -> (
     Option<D::EndpointOut>, Option<D::EndpointIn>,
@@ -425,6 +425,8 @@ fn build<'d, D: Driver<'d>>(
     // - create interface
     // - setup alt descriptor
     // - setup endpoint
+    // interface/endpoint descriptor order matters!
+
     let control = state.control_control.write(Control::new(
         config.vendor_string,
         config.product_string,
@@ -440,7 +442,7 @@ fn build<'d, D: Driver<'d>>(
     let ep_out_if0 = alt_control.endpoint_interrupt_out(XINPUT_EP_MAX_PACKET_SIZE, 0x08);
     // allocate the 4th string descriptor
     let str_index = control_interface.string();
-    assert!(4 == u8::from(str_index), "The newly added string descriptor's index should be 4!");
+    assert!(4 == u8::from(str_index), "The extra str_index should be 4 but it's {} !", u8::from(str_index));
 
     // the audio interface
     let mut audio_interface = func.interface();
@@ -470,19 +472,19 @@ fn build<'d, D: Driver<'d>>(
     )
 }
 
-impl<'d, D: Driver<'d>> XinputReaderWriter<'d, D> {
-    /// Create a new XinputReaderWriter
-    pub fn new(builder: &mut Builder<'d, D>, state: &'d mut XinputState<'d>, config: Config<'d>) -> Self {
+impl<'d, D: Driver<'d>> XInputReaderWriter<'d, D> {
+    /// Create a new XInputReaderWriter
+    pub fn new(builder: &mut Builder<'d, D>, state: &'d mut XInputState<'d>, config: Config<'d>) -> Self {
         let endpoints = build(builder, state, config);
         let (control_out, control_in, _, _, _, _, _) = endpoints;
         Self {
-            reader: XinputReader { ep_out: control_out.unwrap() },
-            writer: XinputWriter { ep_in: control_in.unwrap() },
+            reader: XInputReader { ep_out: control_out.unwrap() },
+            writer: XInputWriter { ep_in: control_in.unwrap() },
         }
     }
 
     /// Splits into seperate readers/writers for input and output reports.
-    pub fn split(self) -> (XinputReader<'d, D>, XinputWriter<'d, D>) {
+    pub fn split(self) -> (XInputReader<'d, D>, XInputWriter<'d, D>) {
         (self.reader, self.writer)
     }
 
@@ -498,13 +500,13 @@ impl<'d, D: Driver<'d>> XinputReaderWriter<'d, D> {
     }
 
     /// Writes an input report with a structure
-    pub async fn write_control(&mut self, report: &XinputControlReport) -> Result<(), EndpointError> {
+    pub async fn write_control(&mut self, report: &XInputControlReport) -> Result<(), EndpointError> {
         self.writer.write_control(report).await
     }
 
     /// Reads an output report from the Interrupt Out pipe.
     ///
-    /// See [`XinputReader::read`].
+    /// See [`XInputReader::read`].
     pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize, ReadError> {
         self.reader.read(buf).await
     }
