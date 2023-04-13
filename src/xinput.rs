@@ -4,9 +4,9 @@
 use core::mem::MaybeUninit;
 use packed_struct::prelude::*;
 
-use embassy_usb::control::{ControlHandler, OutResponse};
+use embassy_usb::control::OutResponse;
 use embassy_usb::driver::{Driver, Endpoint, EndpointError, EndpointIn, EndpointOut};
-use embassy_usb::Builder;
+use embassy_usb::{Builder,Handler};
 
 use defmt::{trace, warn};
 
@@ -31,6 +31,7 @@ const USB_DEVICE_RELEASE: u16 = 0x0114;
 // github.com/dmadison/ArduinoXinput_AVR
 
 // NOTE: the following string may vary on different 3rd-party controllers
+// Since we do not communicate with XBox consoles, the SN doesn't make sense.
 const XINPUT_DESC_STRING_VENDOR: &str = "Embassy";
 const XINPUT_DESC_STRING_PRODUCT: &str = "Pad Oxide";
 const XINPUT_DESC_STRING_SN: &str = "Controller";
@@ -321,7 +322,7 @@ impl<'d> Control<'d> {
     }
 }
 
-impl<'d> ControlHandler for Control<'d> {
+impl<'d> Handler for Control<'d> {
     fn get_string(&mut self, index: embassy_usb::types::StringIndex, lang_id: u16) -> Option<&str> {
         trace!("Xinput get_descriptor string");
         let _ = lang_id;
@@ -463,6 +464,16 @@ fn build<'d, D: Driver<'d>>(
     Option<D::EndpointIn>,
     Option<D::EndpointIn>,
 ) {
+    // add the handler in advance so no mut ref more than once error
+    let control = state.control_control.write(Control::new(
+        config.vendor_string,
+        config.product_string,
+        config.serial_number_string,
+        config.security_string,
+        config.request_handler,
+    ));
+    builder.handler(control);
+
     // add a new configuration
     let mut func = builder.function(USB_CLASS_VENDOR, USB_SUBCLASS_VENDOR, USB_PROTOCOL_VENDOR);
 
@@ -474,19 +485,12 @@ fn build<'d, D: Driver<'d>>(
     // - setup endpoint
     // interface/endpoint descriptor order matters!
 
-    let control = state.control_control.write(Control::new(
-        config.vendor_string,
-        config.product_string,
-        config.serial_number_string,
-        config.security_string,
-        config.request_handler,
-    ));
     let mut control_interface = func.interface();
-    control_interface.handler(control);
     let mut alt_control = control_interface.alt_setting(
         USB_CLASS_VENDOR,
         XINPUT_IFACE_SUBCLASS_STANDARD,
         XINPUT_IFACE_PROTO_IF0,
+        None,
     );
     alt_control.descriptor(XINPUT_DESC_DESCTYPE_STANDARD, XINPUT_DESC_IF0);
     let ep_in_if0 = alt_control.endpoint_interrupt_in(XINPUT_EP_MAX_PACKET_SIZE, 0x04);
@@ -505,6 +509,7 @@ fn build<'d, D: Driver<'d>>(
         USB_CLASS_VENDOR,
         XINPUT_IFACE_SUBCLASS_STANDARD,
         XINPUT_IFACE_PROTO_IF1,
+        None,
     );
     alt_audio.descriptor(XINPUT_DESC_DESCTYPE_STANDARD, XINPUT_DESC_IF1);
     let ep_in_if1_1 = alt_audio.endpoint_interrupt_in(XINPUT_EP_MAX_PACKET_SIZE, 0x02);
@@ -518,6 +523,7 @@ fn build<'d, D: Driver<'d>>(
         USB_CLASS_VENDOR,
         XINPUT_IFACE_SUBCLASS_STANDARD,
         XINPUT_IFACE_PROTO_IF2,
+        None,
     );
     alt_unknown.descriptor(XINPUT_DESC_DESCTYPE_STANDARD, XINPUT_DESC_IF2);
     let ep_in_if2 = alt_unknown.endpoint_interrupt_in(XINPUT_EP_MAX_PACKET_SIZE, 0x10);
@@ -528,6 +534,7 @@ fn build<'d, D: Driver<'d>>(
         USB_CLASS_VENDOR,
         XINPUT_IFACE_SUBCLASS_SECURITY,
         XINPUT_IFACE_PROTO_IF3,
+        None,
     );
     alt_security.descriptor(XINPUT_DESC_DESCTYPE_SECURITY, XINPUT_DESC_IF3);
 

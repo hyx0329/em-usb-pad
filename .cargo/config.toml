@@ -1,0 +1,13 @@
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+# use probe-run to run the executable
+# list supported chips by running `probe-run --list-chips`
+runner = "probe-run --chip STM32F103CB"
+
+[build]
+# This is chip-dependent
+target = "thumbv7m-none-eabi"
+
+[env]
+# Obvious environment variables
+# defmt debug level, https://defmt.ferrous-systems.com/filtering.html
+DEFMT_LOG = "trace"

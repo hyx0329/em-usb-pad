@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 embassy-sync = { version = "0.1.0", path = "embassy/embassy-sync", features = ["defmt"] }
 # embassy's core part
-embassy-executor = { version = "0.1.0", path = "embassy/embassy-executor", features = ["defmt", "integrated-timers"] }
+embassy-executor = { version = "0.1.0", path = "embassy/embassy-executor", features = ["arch-cortex-m", "executor-thread", "defmt", "integrated-timers"] }
 embassy-time = { version = "0.1.0", path = "embassy/embassy-time", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 # through feature "memory-x", the corresponding memeory.x can be generated on the go
 # unstable-pac is used to expose some timer registers

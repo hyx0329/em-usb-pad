@@ -2,7 +2,6 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-use core::sync::atomic::{AtomicBool, Ordering};
 use defmt::*;
 
 use embassy_executor::Spawner;
@@ -14,7 +13,7 @@ use embassy_stm32::usb::Driver;
 use embassy_stm32::{interrupt, Config};
 use embassy_time::{Duration, Timer};
 use embassy_usb::control::OutResponse;
-use embassy_usb::{Builder, DeviceStateHandler};
+use embassy_usb::{Builder};
 use {defmt_rtt as _, panic_probe as _};
 
 mod xinput;
@@ -72,10 +71,10 @@ async fn main(_spawner: Spawner) {
     let mut bos_descriptor = [0; 256];
     let mut control_buf = [0; 64];
     let request_handler = MyRequestHandler {};
-    let device_state_handler = MyDeviceStateHandler::new();
 
     let mut state = XinputState::new();
 
+    // Note: We actually don't need BOS descriptor. It's easy to change. But I'll keep it.
     let mut builder = Builder::new(
         driver,
         config,
@@ -83,8 +82,6 @@ async fn main(_spawner: Spawner) {
         &mut config_descriptor,
         &mut bos_descriptor,
         &mut control_buf,
-        Some(&device_state_handler),
-        false, // do not use BOS descriptor
     );
 
     // Create classes on the builder.
@@ -101,12 +98,7 @@ async fn main(_spawner: Spawner) {
     let mut usb = builder.build();
 
     // Run the USB device.
-    let usb_fut = async {
-        loop {
-            usb.run_until_suspend().await;
-            usb.wait_resume().await;
-        }
-    };
+    let usb_fut = usb.run();
 
     let mut button = ExtiInput::new(Input::new(p.PA0, Pull::Down), p.EXTI0);
 
@@ -163,67 +155,5 @@ impl RequestHandler for MyRequestHandler {
     fn set_report(&self, id: ReportId, data: &[u8]) -> OutResponse {
         info!("Set report for {:?}: {=[u8]}", id, data);
         OutResponse::Accepted
-    }
-}
-
-struct MyDeviceStateHandler {
-    configured: AtomicBool,
-}
-
-impl MyDeviceStateHandler {
-    fn new() -> Self {
-        MyDeviceStateHandler {
-            configured: AtomicBool::new(false),
-        }
-    }
-}
-
-impl DeviceStateHandler for MyDeviceStateHandler {
-    fn enabled(&self, enabled: bool) {
-        self.configured.store(false, Ordering::Relaxed);
-        if enabled {
-            info!("Device enabled");
-        } else {
-            info!("Device disabled");
-        }
-    }
-
-    fn reset(&self) {
-        self.configured.store(false, Ordering::Relaxed);
-        info!("Bus reset");
-    }
-
-    fn addressed(&self, addr: u8) {
-        self.configured.store(false, Ordering::Relaxed);
-        info!("USB address set to: {}", addr);
-    }
-
-    fn configured(&self, configured: bool) {
-        self.configured.store(configured, Ordering::Relaxed);
-        if configured {
-            info!(
-                "Device configured, it may now draw up to the configured current limit from Vbus."
-            )
-        } else {
-            info!("Device is no longer configured.");
-        }
-    }
-
-    fn suspended(&self, suspended: bool) {
-        if suspended {
-            info!("Device suspended, the Vbus current limit is 500µA (or 2.5mA for high-power devices with remote wakeup enabled).");
-        } else {
-            if self.configured.load(Ordering::Relaxed) {
-                info!(
-                    "Device resumed, it may now draw up to the configured current limit from Vbus"
-                );
-            } else {
-                info!("Device resumed, the Vbus current limit is 100mA");
-            }
-        }
-    }
-
-    fn remote_wakeup_enabled(&self, _enabled: bool) {
-        info!("Whether remote wakeup enabled: {}", _enabled);
     }
 }
