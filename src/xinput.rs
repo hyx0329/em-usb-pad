@@ -6,7 +6,7 @@ use packed_struct::prelude::*;
 
 use embassy_usb::control::OutResponse;
 use embassy_usb::driver::{Driver, Endpoint, EndpointError, EndpointIn, EndpointOut};
-use embassy_usb::{Builder,Handler};
+use embassy_usb::{Builder, Handler};
 
 use defmt::{trace, warn};
 
@@ -35,8 +35,7 @@ const USB_DEVICE_RELEASE: u16 = 0x0114;
 const XINPUT_DESC_STRING_VENDOR: &str = "Embassy";
 const XINPUT_DESC_STRING_PRODUCT: &str = "Pad Oxide";
 const XINPUT_DESC_STRING_SN: &str = "Controller";
-const XINPUT_DESC_STRING_SECURITY: &str =
-    "Pad Oxide does not support Xbox Security Method!";
+const XINPUT_DESC_STRING_SECURITY: &str = "Pad Oxide does not support Xbox Security Method!";
 
 const XINPUT_DESC_DESCTYPE_STANDARD: u8 = 0x21; // a common descriptor type for all xinput interfaces
 const XINPUT_DESC_DESCTYPE_SECURITY: u8 = 0x41; // a special one for the security descriptor

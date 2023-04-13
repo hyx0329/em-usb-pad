@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
+use embassy_stm32::gpio::{Input, Output, Pin};
 use heapless::Vec;
-use embassy_stm32::gpio::{Pin, Input, Output};
 
 /// Mark diode direction on the key matrix
 pub enum DiodeDirection {
@@ -14,14 +14,20 @@ pub enum DiodeDirection {
 }
 
 // KeyEvent, Up or Down, with index(u8)
-pub enum KeyEvent{
+pub enum KeyEvent {
     /// Key down event with key index
     Down(u8),
     /// Key up event with key index
     Up(u8),
 }
 
-pub struct KeyMatrix<'d, P: Pin, const SIZE_IN: usize, const SIZE_OUT: usize, const EVENT_COUNT: usize> {
+pub struct KeyMatrix<
+    'd,
+    P: Pin,
+    const SIZE_IN: usize,
+    const SIZE_OUT: usize,
+    const EVENT_COUNT: usize,
+> {
     inputs: Vec<Input<'d, P>, SIZE_IN>,
     outputs: Vec<Output<'d, P>, SIZE_OUT>,
     last_results: Vec<Vec<bool, SIZE_OUT>, SIZE_IN>,
@@ -29,5 +35,7 @@ pub struct KeyMatrix<'d, P: Pin, const SIZE_IN: usize, const SIZE_OUT: usize, co
     diode_direction: DiodeDirection,
 }
 
-impl<'d, P: Pin, const SIZE_IN: usize, const SIZE_OUT: usize, const EVENT_COUNT: usize> KeyMatrix<'d, P, SIZE_IN, SIZE_OUT, EVENT_COUNT> {
+impl<'d, P: Pin, const SIZE_IN: usize, const SIZE_OUT: usize, const EVENT_COUNT: usize>
+    KeyMatrix<'d, P, SIZE_IN, SIZE_OUT, EVENT_COUNT>
+{
 }

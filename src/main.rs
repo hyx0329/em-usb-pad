@@ -13,7 +13,7 @@ use embassy_stm32::usb::Driver;
 use embassy_stm32::{interrupt, Config};
 use embassy_time::{Duration, Timer};
 use embassy_usb::control::OutResponse;
-use embassy_usb::{Builder};
+use embassy_usb::Builder;
 use {defmt_rtt as _, panic_probe as _};
 
 mod xinput;
