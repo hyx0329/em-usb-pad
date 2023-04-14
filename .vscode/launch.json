@@ -1,0 +1,40 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "probe-rs rtt",
+            "preLaunchTask": "Build(Debug)",
+            "cwd": "${workspaceFolder}",
+            "connectUnderReset": true,
+            "chip": "STM32F103CB",
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "resetAfterFlashing": true,
+                "haltAfterReset": true
+            },
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    "programBinary": "./target/thumbv7m-none-eabi/debug/${workspaceFolderBasename}",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                          "channelNumber": 0,    // Defmt always uses channel 0
+                          "dataFormat": "Defmt", // Format RTT data as Defmt data
+                          "showTimestamps": true // Include host-side timestamps for every line of data transferred from the target RTT output
+                        },
+                    ]
+                }
+            ],
+            "env": {
+                "DEFMT_LOG": "trace",
+                "RUST_LOG": "trace"
+            }
+        }
+    ]
+}
