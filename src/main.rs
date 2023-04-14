@@ -16,6 +16,9 @@ use embassy_usb::control::OutResponse;
 use embassy_usb::Builder;
 use {defmt_rtt as _, panic_probe as _};
 
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::channel::Channel;
+
 mod xinput;
 use crate::xinput::{
     ReportId, RequestHandler, XinputControlReport, XinputReaderWriter, XinputState,
@@ -115,10 +118,13 @@ async fn main(_spawner: Spawner) {
     // Build the builder.
     let mut usb = builder.build();
 
-    // Run the USB device.
+    // Run the USB device. Well, here's only the future to run.
     let usb_fut = usb.run();
 
-    let mut button = ExtiInput::new(Input::new(p.PA0, Pull::Down), p.EXTI0);
+    // previously I use a single button to test
+    // this might be developed to a button for special functions
+    // I need abstraction.
+    let mut _button = ExtiInput::new(Input::new(p.PA0, Pull::Down), p.EXTI0);
 
     let (reader, mut writer) = xinput.split();
 
@@ -139,6 +145,12 @@ async fn main(_spawner: Spawner) {
 
     let keys = keypad.decompose();
 
+    // communication between tasks
+    let channel = Channel::<NoopRawMutex, (bool, (usize, usize)), 24>::new();
+    let sender = channel.sender();
+    let receiver = channel.receiver();
+
+    // scan keys and generate key events
     let keypad_fut = async {
         let mut button_states = [false; 12];
         loop {
@@ -149,10 +161,12 @@ async fn main(_spawner: Spawner) {
                         (true, false) => {
                             info!("Key {} pressed", (row_index, col_index));
                             button_states[col_index * 4 + row_index] = current_state;
+                            sender.send((current_state, (row_index, col_index))).await;
                         }
                         (false, true) => {
                             info!("Key {} released", (row_index, col_index));
                             button_states[col_index * 4 + row_index] = current_state;
+                            sender.send((current_state, (row_index, col_index))).await;
                         }
                         _ => {}
                     }
@@ -162,37 +176,38 @@ async fn main(_spawner: Spawner) {
         }
     };
 
-    // Do stuff with the class!
+    // Process key events
     let in_fut = async {
+        let mut controller = XinputControlReport::default();
+
         loop {
-            button.wait_for_high().await;
-            info!("PRESSED");
+            let (status, button) = receiver.recv().await;
 
-            let report = XinputControlReport {
-                button_a: true,
-                ..Default::default()
+            let _ = match button {
+                (0, 0) => controller.dpad_right = status,
+                (1, 0) => controller.dpad_up = status,
+                (2, 0) => controller.dpad_left = status,
+                (3, 0) => controller.dpad_down = status,
+                (0, 1) => controller.button_b = status,
+                (1, 1) => controller.button_y = status,
+                (2, 1) => controller.button_x = status,
+                (3, 1) => controller.button_a = status,
+                (0, 2) => controller.button_view = status,
+                (1, 2) => controller.button_menu = status,
+                (2, 2) => controller.shoulder_left = status,
+                (3, 2) => controller.shoulder_right = status,
+                _ => {}
             };
 
-            match writer.write_control(&report).await {
-                Ok(()) => {}
-                Err(e) => warn!("Failed to send report: {:?}", e),
-            };
-
-            button.wait_for_low().await;
-            info!("RELEASED");
-
-            let report = XinputControlReport {
-                button_a: false,
-                ..report
-            };
-
-            match writer.write_control(&report).await {
+            match writer.write_control(&controller).await {
                 Ok(()) => {}
                 Err(e) => warn!("Failed to send report: {:?}", e),
             };
         }
     };
 
+    // read report from USB host
+    // basically rumble and led status
     let out_fut = async {
         reader.run(false, &request_handler).await;
     };

@@ -16,7 +16,7 @@ use defmt::{trace, warn};
 // - Unknown (whatever)
 // - Security
 // each interface may have several endpoints to use
-// btw, embassy-usb limit the usb interface number to 4, which is just enough
+// btw, embassy-usb's default limit to usb interface count is 4, which is just enough
 // The Xinput protocol is NOT a variant of USB HID, it's a fully customized one.
 
 // just copied from a controller with Xinput support
@@ -335,7 +335,7 @@ impl<'d> Handler for Control<'d> {
     }
 }
 
-/// A shared state of interface status
+/// A shared state of USB interface status
 pub struct XinputState<'d> {
     control_control: MaybeUninit<Control<'d>>,
 }
