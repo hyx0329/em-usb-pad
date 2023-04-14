@@ -35,6 +35,7 @@ nb = "1.0.0"
 
 packed_struct = { version = "0.10", default-features = false, features = ["serde"] }
 serde = { version = "1.0.152", default-features = false }
+keypad = "0.2.2"
 
 [profile.dev]
 opt-level = "s"

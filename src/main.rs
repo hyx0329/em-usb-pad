@@ -5,9 +5,9 @@
 use defmt::*;
 
 use embassy_executor::Spawner;
-use embassy_futures::join::join;
+use embassy_futures::join::join4;
 use embassy_stm32::exti::ExtiInput;
-use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
+use embassy_stm32::gpio::{Input, Level, Output, OutputOpenDrain, Pull, Speed};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usb::Driver;
 use embassy_stm32::{interrupt, Config};
@@ -21,11 +21,29 @@ use crate::xinput::{
     ReportId, RequestHandler, XinputControlReport, XinputReaderWriter, XinputState,
 };
 
-mod keymatrix;
+use core::convert::Infallible;
+use embassy_stm32::peripherals::{PA1, PA2, PA3, PA4, PA5, PA6, PA7};
+use keypad::{embedded_hal::digital::v2::InputPin, keypad_new, keypad_struct};
 
 const VENDOR_STRING: &'static str = "TEST";
 const PRODUCT_STRING: &'static str = "TEST CON";
 const SERIAL_NUMBER: &'static str = "157F8F9";
+
+keypad_struct! {
+    struct MyKeypad<Error = Infallible> {
+        rows: (
+            Input<'static, PA1>,
+            Input<'static, PA2>,
+            Input<'static, PA3>,
+            Input<'static, PA4>,
+        ),
+        columns: (
+            OutputOpenDrain<'static, PA5>,
+            OutputOpenDrain<'static, PA6>,
+            OutputOpenDrain<'static, PA7>,
+        ),
+    }
+}
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -104,6 +122,46 @@ async fn main(_spawner: Spawner) {
 
     let (reader, mut writer) = xinput.split();
 
+    // prepare the keypad
+    let keypad = keypad_new!(MyKeypad {
+        rows: (
+            Input::new(p.PA1, Pull::Up),
+            Input::new(p.PA2, Pull::Up),
+            Input::new(p.PA3, Pull::Up),
+            Input::new(p.PA4, Pull::Up),
+        ),
+        columns: (
+            OutputOpenDrain::new(p.PA5, Level::High, Speed::VeryHigh, Pull::Down),
+            OutputOpenDrain::new(p.PA6, Level::High, Speed::VeryHigh, Pull::Down),
+            OutputOpenDrain::new(p.PA7, Level::High, Speed::VeryHigh, Pull::Down),
+        ),
+    });
+
+    let keys = keypad.decompose();
+
+    let keypad_fut = async {
+        let mut button_states = [false; 12];
+        loop {
+            for (row_index, row) in keys.iter().enumerate() {
+                for (col_index, key) in row.iter().enumerate() {
+                    let current_state = if key.is_low().unwrap() { true } else { false };
+                    match (current_state, button_states[col_index * 4 + row_index]) {
+                        (true, false) => {
+                            info!("Key {} pressed", (row_index, col_index));
+                            button_states[col_index * 4 + row_index] = current_state;
+                        }
+                        (false, true) => {
+                            info!("Key {} released", (row_index, col_index));
+                            button_states[col_index * 4 + row_index] = current_state;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Timer::after(Duration::from_hz(120)).await; // also debounce
+        }
+    };
+
     // Do stuff with the class!
     let in_fut = async {
         loop {
@@ -141,7 +199,7 @@ async fn main(_spawner: Spawner) {
 
     // Run everything concurrently.
     // If we had made everything `'static` above instead, we could do this using separate tasks instead.
-    join(usb_fut, join(in_fut, out_fut)).await;
+    join4(usb_fut, in_fut, out_fut, keypad_fut).await;
 }
 
 struct MyRequestHandler {}
